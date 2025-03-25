@@ -1,32 +1,35 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TubeScript - YouTube Transcription</title>
   <link rel="stylesheet" href="/src/styles/main.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
 </head>
-<body>
-  <div id="app">
-    <header>
-      <h1>TubeScript</h1>
+<body class="bg-gray-900 text-gray-100">
+  <div id="app" class="app-container">
+    <header class="header">
+      <h1 class="text-gradient">TubeScript</h1>
       <p>Generate speaker-separated transcripts from YouTube videos</p>
     </header>
 
     <main>
       <section id="input-section">
-        <h2>Video Input</h2>
+        <h2 class="text-2xl mb-4 text-emerald-400">Video Input</h2>
         <div class="card">
           <div class="form-group">
-            <label for="youtube-url">Enter YouTube URL:</label>
-            <input type="text" id="youtube-url" placeholder="https://www.youtube.com/watch?v=...">
+            <label for="youtube-url" class="form-label">Enter YouTube URL:</label>
+            <input type="text" id="youtube-url" class="form-input" placeholder="https://www.youtube.com/watch?v=...">
           </div>
-          <button id="process-btn" class="primary-btn">Process Video</button>
+          <button id="process-btn" class="btn-primary">Process Video</button>
         </div>
       </section>
 
       <section id="progress-section" class="hidden">
-        <h2>Processing</h2>
+        <h2 class="text-2xl mb-4 text-emerald-400">Processing</h2>
         <div class="card">
           <div class="progress-container">
             <div class="progress-bar">
@@ -38,7 +41,7 @@
       </section>
 
       <section id="result-section" class="hidden">
-        <h2>Transcript</h2>
+        <h2 class="text-2xl mb-4 text-emerald-400">Transcript</h2>
         <div class="card">
           <div class="metadata">
             <div id="video-title"></div>
@@ -48,8 +51,8 @@
 
           <div class="speaker-controls">
             <h3>Speaker Names</h3>
-            <div id="speaker-labels"></div>
-            <button id="apply-names-btn" class="secondary-btn">Apply Names</button>
+            <div id="speaker-labels" class="speaker-labels"></div>
+            <button id="apply-names-btn" class="btn-secondary">Apply Names</button>
           </div>
 
           <div class="transcript-container">
@@ -59,19 +62,25 @@
           <div class="export-options">
             <h3>Export Options</h3>
             <div class="btn-group">
-              <button id="export-txt-btn" class="secondary-btn">TXT</button>
-              <button id="export-srt-btn" class="secondary-btn">SRT</button>
-              <button id="export-vtt-btn" class="secondary-btn">VTT</button>
+              <button id="export-txt-btn" class="btn-secondary">TXT</button>
+              <button id="export-srt-btn" class="btn-secondary">SRT</button>
+              <button id="export-vtt-btn" class="btn-secondary">VTT</button>
             </div>
           </div>
         </div>
       </section>
     </main>
 
-    <footer>
+    <footer class="mt-16 text-center py-5 text-gray-400 dark:text-gray-400 border-t border-gray-700">
       <p>&copy; 2025 TubeScript</p>
     </footer>
   </div>
+
+  <style>
+    .text-gradient {
+      @apply bg-clip-text text-transparent bg-gradient-to-r from-green-300 via-emerald-500 to-teal-400;
+    }
+  </style>
 
   <script type="module" src="/src/main.js"></script>
 </body>

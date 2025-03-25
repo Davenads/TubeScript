@@ -61,7 +61,17 @@ npm install
 
 ## Usage
 
-### 1. Start the backend server
+### 1. Using the start script (Windows)
+
+For convenience, a start script is included that launches both backend and frontend servers:
+
+```bash
+start.bat
+```
+
+### 2. Manual startup
+
+#### Start the backend server
 
 ```bash
 cd backend
@@ -71,7 +81,7 @@ python app.py
 
 The API will be available at http://localhost:8000
 
-### 2. Start the frontend development server
+#### Start the frontend development server
 
 ```bash
 cd frontend
