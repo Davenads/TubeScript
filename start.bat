@@ -39,9 +39,9 @@ if not exist frontend\node_modules (
     cd ..
 )
 
-REM Start frontend dev server in current window
-cd frontend && npm run dev
-
 echo TubeScript is starting...
 echo Backend server: http://localhost:8000
-echo Frontend application: http://localhost:5173
+echo Frontend application: http://localhost:3000
+
+REM Start frontend dev server in current window
+cd frontend && npm run dev

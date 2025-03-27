@@ -60,3 +60,7 @@ yarn-error.log*
 *.local.json
 *.local.js
 *.local.py
+
+#claude files
+YOUTUBE_ENHANCED_EXPORT.md
+youtube-subtitle-support.md

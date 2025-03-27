@@ -1,133 +1,114 @@
+import axios from 'axios';
+
 // API endpoint configuration
 const API_BASE_URL = 'http://localhost:8000';
+
+// Create axios instance
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
 
 // Process YouTube video
 export async function processYouTubeVideo(url) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/process`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ url })
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || 'Failed to process video');
-    }
-    
-    return await response.json();
+    const response = await api.post('/api/process', { url });
+    return response.data;
   } catch (error) {
     console.error('API Error:', error);
-    throw error;
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to process video');
   }
 }
 
 // Get job status
 export async function getJobStatus(jobId) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/status/${jobId}`);
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || 'Failed to get job status');
-    }
-    
-    return await response.json();
+    const response = await api.get(`/api/status/${jobId}`);
+    return response.data;
   } catch (error) {
     console.error('API Error:', error);
-    throw error;
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to get job status');
   }
 }
 
 // Fetch transcript
 export async function fetchTranscript(jobId) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/transcript/${jobId}`);
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || 'Failed to fetch transcript');
-    }
-    
-    return await response.json();
+    const response = await api.get(`/api/transcript/${jobId}`);
+    return response.data;
   } catch (error) {
     console.error('API Error:', error);
-    throw error;
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to fetch transcript');
   }
 }
 
 // Rename speakers
 export async function renameSpeakers(jobId, speakerMapping) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/rename/${jobId}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ speaker_mapping: speakerMapping })
+    const response = await api.post(`/api/rename/${jobId}`, { 
+      speaker_mapping: speakerMapping 
     });
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || 'Failed to rename speakers');
-    }
-    
-    return await response.json();
+    return response.data;
   } catch (error) {
     console.error('API Error:', error);
-    throw error;
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to rename speakers');
   }
 }
 
 // Export transcript
 export async function exportTranscript(jobId, format) {
   try {
-    // Create a temporary link to download the file
-    const response = await fetch(`${API_BASE_URL}/api/export/${jobId}?format=${format}`);
+    // Use blob response type for file download
+    const response = await api.get(`/api/export/${jobId}?format=${format}`, {
+      responseType: 'blob'
+    });
     
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || `Failed to export as ${format}`);
-    }
-    
-    // Check if response is JSON (error) or file (success)
-    const contentType = response.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      const jsonData = await response.json();
-      // If server returns a message instead of a file
-      if (jsonData.message) {
-        throw new Error(jsonData.message);
-      }
-    }
-    
-    // Use Blob to handle the response as a file
-    const blob = await response.blob();
+    // Create a blob URL for the file
+    const blob = new Blob([response.data]);
     const url = window.URL.createObjectURL(blob);
     
     // Get filename from Content-Disposition header if available
     let filename = `transcript.${format}`;
-    const disposition = response.headers.get('content-disposition');
-    if (disposition && disposition.includes('filename=')) {
+    const contentDisposition = response.headers['content-disposition'];
+    
+    if (contentDisposition) {
       const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-      const matches = filenameRegex.exec(disposition);
+      const matches = filenameRegex.exec(contentDisposition);
       if (matches != null && matches[1]) {
         filename = matches[1].replace(/['"]/g, '');
       }
     }
     
+    // Create a temporary link element to trigger the download
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
+    
+    // Clean up
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
     
     return true;
   } catch (error) {
     console.error('API Error:', error);
-    throw error;
+    
+    // Check if the error response is JSON
+    if (error.response?.data instanceof Blob) {
+      try {
+        // Convert blob to text to see if it contains error message
+        const text = await error.response.data.text();
+        const json = JSON.parse(text);
+        throw new Error(json.detail || `Failed to export as ${format}`);
+      } catch (e) {
+        // If blob can't be parsed as JSON, throw generic error
+        throw new Error(`Failed to export as ${format}`);
+      }
+    }
+    
+    throw new Error(error.response?.data?.detail || error.message || `Failed to export as ${format}`);
   }
 }
