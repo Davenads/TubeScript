@@ -36,6 +36,10 @@ class YouTubeRequest(BaseModel):
 class RenameRequest(BaseModel):
     speaker_mapping: dict[str, str]
 
+class MergeSpeakersRequest(BaseModel):
+    speakers_to_merge: list[str]
+    new_name: str
+
 # Status response model
 class JobStatus(BaseModel):
     job_id: str
@@ -115,15 +119,89 @@ async def rename_speakers(job_id: str, request: RenameRequest):
     transcript = job["result"]
     segments = transcript["segments"]
     
+    # Count renamed speakers for debugging
+    renamed_count = 0
+    
+    # Log the mapping for debugging
+    print(f"[JOB {job_id}] Renaming speakers with mapping: {request.speaker_mapping}")
+    
     for segment in segments:
         current_speaker = segment["speaker"]
         if current_speaker in request.speaker_mapping:
             segment["speaker"] = request.speaker_mapping[current_speaker]
+            renamed_count += 1
     
     # Update job store
     job_store[job_id]["result"] = transcript
     
-    return {"message": "Speakers renamed successfully"}
+    print(f"[JOB {job_id}] Renamed {renamed_count} segments successfully")
+    
+    # Return the updated mapping for the client
+    return {
+        "message": "Speakers renamed successfully",
+        "renamed_segments": renamed_count,
+        "speaker_mapping": request.speaker_mapping
+    }
+
+@app.post("/api/merge/{job_id}")
+async def merge_speakers(job_id: str, request: MergeSpeakersRequest):
+    if job_id not in job_store:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job = job_store[job_id]
+    
+    if job["status"] != "completed":
+        raise HTTPException(status_code=400, detail="Transcript not ready yet")
+    
+    # Validate request
+    if len(request.speakers_to_merge) < 2:
+        raise HTTPException(status_code=400, detail="At least two speakers must be provided for merging")
+    
+    # Apply speaker merging
+    transcript = job["result"]
+    segments = transcript["segments"]
+    
+    # Track which speakers were merged for metadata update
+    merged_speakers = set()
+    merged_segment_count = 0
+    
+    # Log the request for debugging
+    print(f"[JOB {job_id}] Merging speakers: {request.speakers_to_merge} into: {request.new_name}")
+    
+    # Replace all speakers in the list with the new merged name
+    for segment in segments:
+        current_speaker = segment["speaker"]
+        if current_speaker in request.speakers_to_merge:
+            segment["speaker"] = request.new_name
+            merged_speakers.add(current_speaker)
+            merged_segment_count += 1
+    
+    # Update the speaker count in metadata if needed
+    metadata = transcript["metadata"]
+    original_speaker_count = metadata["num_speakers"]
+    
+    # Count unique speakers after merging
+    unique_speakers = set()
+    for segment in segments:
+        unique_speakers.add(segment["speaker"])
+    
+    metadata["num_speakers"] = len(unique_speakers)
+    
+    # Log results for debugging
+    print(f"[JOB {job_id}] Merged {len(merged_speakers)} speakers affecting {merged_segment_count} segments")
+    print(f"[JOB {job_id}] New speaker count: {metadata['num_speakers']}")
+    
+    # Update job store
+    job_store[job_id]["result"] = transcript
+    
+    return {
+        "message": "Speakers merged successfully", 
+        "merged": list(merged_speakers),
+        "new_name": request.new_name,
+        "updated_speaker_count": metadata["num_speakers"],
+        "affected_segments": merged_segment_count,
+        "unique_speakers": list(unique_speakers)
+    }
 
 @app.get("/api/export/{job_id}")
 async def export_transcript(job_id: str, format: str = "txt"):

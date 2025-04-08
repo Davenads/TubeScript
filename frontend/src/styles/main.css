@@ -153,6 +153,26 @@
   .export-options h3 {
     @apply mb-4 text-xl text-emerald-400;
   }
+  
+  .merge-controls {
+    @apply border-t border-gray-700 pt-6;
+  }
+  
+  .merge-controls h3 {
+    @apply mb-4 text-xl text-emerald-400;
+  }
+  
+  .checkbox-group {
+    @apply grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3;
+  }
+  
+  .checkbox-item {
+    @apply flex items-center bg-gray-700/50 p-2 rounded-md hover:bg-gray-700 transition-colors;
+  }
+  
+  .checkbox-item input[type="checkbox"] {
+    @apply w-4 h-4 border-gray-600 rounded accent-emerald-500;
+  }
 }
 
 @keyframes fadeIn {

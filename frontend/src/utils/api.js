@@ -47,13 +47,36 @@ export async function fetchTranscript(jobId) {
 // Rename speakers
 export async function renameSpeakers(jobId, speakerMapping) {
   try {
+    console.log(`Sending rename request for job ${jobId} with mapping:`, speakerMapping);
     const response = await api.post(`/api/rename/${jobId}`, { 
       speaker_mapping: speakerMapping 
     });
+    console.log('Rename response:', response.data);
     return response.data;
   } catch (error) {
     console.error('API Error:', error);
     throw new Error(error.response?.data?.detail || error.message || 'Failed to rename speakers');
+  }
+}
+
+// Merge speakers
+export async function mergeSpeakers(jobId, speakersToMerge, newName) {
+  try {
+    console.log(`Sending merge request for job ${jobId}:`, {
+      speakers_to_merge: speakersToMerge,
+      new_name: newName
+    });
+    
+    const response = await api.post(`/api/merge/${jobId}`, {
+      speakers_to_merge: speakersToMerge,
+      new_name: newName
+    });
+    
+    console.log('Merge response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('API Error:', error);
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to merge speakers');
   }
 }
 
