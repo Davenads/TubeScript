@@ -4,6 +4,7 @@ from pydantic import BaseModel, HttpUrl
 import uuid
 import os
 from dotenv import load_dotenv
+from typing import Optional
 
 # Load environment variables
 load_dotenv()
@@ -13,6 +14,7 @@ from modules.youtube import download_youtube_audio
 from modules.diarization import perform_diarization
 from modules.transcription import transcribe_segments
 from modules.assembler import assemble_transcript
+from modules.enhanced_export import EnhancedExport
 
 # Create app instance
 app = FastAPI(title="TubeScript API", description="YouTube Audio Diarization and Transcription API")
@@ -204,10 +206,11 @@ async def merge_speakers(job_id: str, request: MergeSpeakersRequest):
     }
 
 @app.get("/api/export/{job_id}")
-async def export_transcript(job_id: str, format: str = "txt"):
+async def export_transcript(job_id: str, format: str = "txt", options: Optional[str] = None):
     from fastapi.responses import PlainTextResponse, Response
     from starlette.responses import StreamingResponse
     import io
+    import json
     from modules.assembler import format_timestamp
     from datetime import timedelta
     
@@ -222,24 +225,36 @@ async def export_transcript(job_id: str, format: str = "txt"):
     # Get the most up-to-date transcript with any renamed speakers
     transcript = job["result"]
     
-    # Regenerate the plaintext version with the latest speaker names if we're exporting TXT
-    if format.lower() == "txt":
-        # Regenerate plaintext to ensure speaker names are current
-        metadata = transcript["metadata"]
-        segments = transcript["segments"]
-        
-        plaintext = f"Title: {metadata['title']}\n"
-        plaintext += f"URL: {metadata['url']}\n"
-        plaintext += f"Duration: {metadata['duration']}\n"
-        plaintext += f"Speakers Detected: {metadata['num_speakers']}\n\n"
-        
-        for segment in segments:
-            start_str = format_timestamp(segment["start"])
-            end_str = format_timestamp(segment["end"])
-            plaintext += f"[{start_str} --> {end_str}] {segment['speaker']}: {segment['text']}\n\n"
-        
-        transcript["plaintext"] = plaintext
+    # Handle enhanced export options
+    if options:
+        try:
+            # Parse options from JSON string
+            export_options = json.loads(options)
+            
+            # Initialize enhanced export
+            enhanced_export = EnhancedExport(transcript, export_options)
+            
+            # Generate export content
+            content = enhanced_export.generate_export()
+            
+            # Determine filename based on format
+            filename_base = transcript['metadata']['title'].replace(' ', '_')
+            filename = f"{filename_base}_enhanced.{format}"
+            
+            return PlainTextResponse(
+                content=content,
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"',
+                    "Content-Type": f"text/{format}"
+                }
+            )
+            
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid export options format")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
     
+    # Handle standard export formats
     filename_base = transcript['metadata']['title'].replace(' ', '_')
     
     # Handle TXT format (plaintext export)

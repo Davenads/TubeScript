@@ -81,10 +81,14 @@ export async function mergeSpeakers(jobId, speakersToMerge, newName) {
 }
 
 // Export transcript
-export async function exportTranscript(jobId, format) {
+export async function exportTranscript(jobId, format, options = null) {
   try {
     // Use blob response type for file download
-    const response = await api.get(`/api/export/${jobId}?format=${format}`, {
+    const response = await api.get(`/api/export/${jobId}`, {
+      params: {
+        format,
+        ...(options && { options: JSON.stringify(options) })
+      },
       responseType: 'blob'
     });
     

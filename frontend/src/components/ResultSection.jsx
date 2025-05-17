@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { renameSpeakers, exportTranscript, fetchTranscript, mergeSpeakers } from '../utils/api';
 import TranscriptSegment from './TranscriptSegment';
 import SpeakerLabel from './SpeakerLabel';
+import YouTubeEnhancedExport from './YouTubeEnhancedExport';
 
 const ResultSection = ({ transcript, jobId, onTranscriptUpdate }) => {
   const [success, setSuccess] = useState('');
@@ -9,6 +10,7 @@ const ResultSection = ({ transcript, jobId, onTranscriptUpdate }) => {
   const [speakerNames, setSpeakerNames] = useState({});
   const [selectedSpeakers, setSelectedSpeakers] = useState([]);
   const [mergedName, setMergedName] = useState('');
+  const [showEnhancedExport, setShowEnhancedExport] = useState(false);
   
   // Initialize speaker names whenever transcript changes
   useEffect(() => {
@@ -152,10 +154,10 @@ const ResultSection = ({ transcript, jobId, onTranscriptUpdate }) => {
     }
   };
   
-  const handleExport = async (format) => {
+  const handleExport = async (format, options = null) => {
     try {
       setError('');
-      await exportTranscript(jobId, format);
+      await exportTranscript(jobId, format, options);
     } catch (err) {
       console.error(`Error exporting ${format}:`, err);
       setError(err.message || `Failed to export as ${format}`);
@@ -304,9 +306,27 @@ const ResultSection = ({ transcript, jobId, onTranscriptUpdate }) => {
             >
               VTT
             </button>
+            <button 
+              className="btn-primary"
+              onClick={() => setShowEnhancedExport(true)}
+            >
+              YouTube Enhanced
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Enhanced Export Wizard Modal */}
+      {showEnhancedExport && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <YouTubeEnhancedExport
+              jobId={jobId}
+              onClose={() => setShowEnhancedExport(false)}
+            />
+          </div>
+        </div>
+      )}
     </section>
   );
 };
