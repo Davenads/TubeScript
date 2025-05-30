@@ -173,6 +173,25 @@
   .checkbox-item input[type="checkbox"] {
     @apply w-4 h-4 border-gray-600 rounded accent-emerald-500;
   }
+  
+  .form-checkbox {
+    @apply w-4 h-4 text-emerald-600 bg-gray-700 border border-gray-600 rounded
+    focus:ring-emerald-500 focus:ring-2 focus:ring-offset-0;
+  }
+  
+  .slider {
+    background: linear-gradient(to right, #374151 0%, #10b981 100%);
+  }
+  
+  .slider::-webkit-slider-thumb {
+    @apply appearance-none w-5 h-5 bg-emerald-500 rounded-full cursor-pointer
+    shadow-lg border-2 border-gray-800;
+  }
+  
+  .slider::-moz-range-thumb {
+    @apply w-5 h-5 bg-emerald-500 rounded-full cursor-pointer
+    shadow-lg border-2 border-gray-800;
+  }
 }
 
 @keyframes fadeIn {

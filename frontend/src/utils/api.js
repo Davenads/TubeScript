@@ -12,9 +12,12 @@ const api = axios.create({
 });
 
 // Process YouTube video
-export async function processYouTubeVideo(url) {
+export async function processYouTubeVideo(url, options = {}) {
   try {
-    const response = await api.post('/api/process', { url });
+    const response = await api.post('/api/process', { 
+      url,
+      ...options
+    });
     return response.data;
   } catch (error) {
     console.error('API Error:', error);
