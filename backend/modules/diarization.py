@@ -10,7 +10,7 @@ from utils.audio import start_gpu_monitoring
 # Load environment variables
 load_dotenv()
 
-async def perform_diarization(audio_path: str):
+async def perform_diarization(audio_path: str, sensitivity: float = 0.5):
     """Perform speaker diarization on an audio file"""
     # Get HuggingFace token from environment
     hf_token = os.getenv("HUGGINGFACE_TOKEN")
@@ -50,6 +50,13 @@ async def perform_diarization(audio_path: str):
             "pyannote/speaker-diarization-3.1",
             use_auth_token=hf_token
         )
+        
+        # Configure clustering parameters based on sensitivity
+        # Higher sensitivity = more speakers detected
+        if hasattr(pipeline, '_segmentation'):
+            pipeline._segmentation.clustering.min_cluster_size = max(0.1, 1.0 - sensitivity)
+        if hasattr(pipeline, '_clustering'):
+            pipeline._clustering.min_cluster_size = max(0.1, 1.0 - sensitivity)
         
         # Move model to specified device
         pipeline = pipeline.to(torch.device(device))

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import cache from './cache.js';
 
 // API endpoint configuration
 const API_BASE_URL = 'http://localhost:8000';
@@ -28,8 +29,20 @@ export async function processYouTubeVideo(url, options = {}) {
 // Get job status
 export async function getJobStatus(jobId) {
   try {
+    // Check cache first
+    const cachedJob = cache.getCachedJob(jobId);
+    if (cachedJob && cachedJob.status === 'completed') {
+      console.log(`💾 Using cached job status for ${jobId}`);
+      return cachedJob;
+    }
+
     const response = await api.get(`/api/status/${jobId}`);
-    return response.data;
+    const jobData = response.data;
+    
+    // Cache the job data
+    cache.cacheJob(jobId, jobData);
+    
+    return jobData;
   } catch (error) {
     console.error('API Error:', error);
     throw new Error(error.response?.data?.detail || error.message || 'Failed to get job status');
@@ -39,8 +52,24 @@ export async function getJobStatus(jobId) {
 // Fetch transcript
 export async function fetchTranscript(jobId) {
   try {
+    // Check cache first
+    const cachedTranscript = await cache.getCachedTranscript(jobId);
+    if (cachedTranscript) {
+      console.log(`💾 Using cached transcript for ${jobId}`);
+      return cachedTranscript.transcript;
+    }
+
     const response = await api.get(`/api/transcript/${jobId}`);
-    return response.data;
+    const transcript = response.data;
+    
+    // Cache the transcript
+    await cache.cacheTranscript(jobId, transcript, {
+      title: transcript.metadata?.title,
+      url: transcript.metadata?.url,
+      duration: transcript.metadata?.duration
+    });
+    
+    return transcript;
   } catch (error) {
     console.error('API Error:', error);
     throw new Error(error.response?.data?.detail || error.message || 'Failed to fetch transcript');
@@ -55,6 +84,22 @@ export async function renameSpeakers(jobId, speakerMapping) {
       speaker_mapping: speakerMapping 
     });
     console.log('Rename response:', response.data);
+    
+    // Update cached transcript with new speaker names
+    const cachedTranscript = await cache.getCachedTranscript(jobId);
+    if (cachedTranscript) {
+      // Update speaker names in cached transcript
+      const updatedTranscript = { ...cachedTranscript.transcript };
+      updatedTranscript.segments = updatedTranscript.segments.map(segment => ({
+        ...segment,
+        speaker: speakerMapping[segment.speaker] || segment.speaker
+      }));
+      
+      // Re-cache the updated transcript
+      await cache.cacheTranscript(jobId, updatedTranscript, cachedTranscript.metadata);
+      console.log(`💾 Updated cached transcript with new speaker names for ${jobId}`);
+    }
+    
     return response.data;
   } catch (error) {
     console.error('API Error:', error);
@@ -141,4 +186,93 @@ export async function exportTranscript(jobId, format, options = null) {
     
     throw new Error(error.response?.data?.detail || error.message || `Failed to export as ${format}`);
   }
+}
+
+// Batch processing functions with caching
+
+// Get batch preview
+export async function getBatchPreview(url, limit = 10) {
+  try {
+    const response = await api.post('/api/batch-preview', { url, limit });
+    return response.data;
+  } catch (error) {
+    console.error('API Error:', error);
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to get batch preview');
+  }
+}
+
+// Start batch processing
+export async function processBatch(url, options = {}) {
+  try {
+    const response = await api.post('/api/batch-process', { url, ...options });
+    const batchData = response.data;
+    
+    // Cache initial batch data
+    cache.cacheBatch(batchData.batch_id, batchData);
+    
+    return batchData;
+  } catch (error) {
+    console.error('API Error:', error);
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to start batch processing');
+  }
+}
+
+// Get batch status
+export async function getBatchStatus(batchId) {
+  try {
+    // Check cache first for completed batches
+    const cachedBatch = cache.getCachedBatch(batchId);
+    if (cachedBatch && ['completed', 'failed', 'partial'].includes(cachedBatch.status)) {
+      console.log(`💾 Using cached batch status for ${batchId}`);
+      return cachedBatch;
+    }
+
+    const response = await api.get(`/api/batch-status/${batchId}`);
+    const batchData = response.data;
+    
+    // Cache the batch data
+    cache.cacheBatch(batchId, batchData);
+    
+    return batchData;
+  } catch (error) {
+    console.error('API Error:', error);
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to get batch status');
+  }
+}
+
+// Get batch results
+export async function getBatchResults(batchId) {
+  try {
+    const response = await api.get(`/api/batch-results/${batchId}`);
+    const results = response.data;
+    
+    // Cache individual transcripts from batch results
+    if (results.results) {
+      for (const result of results.results) {
+        await cache.cacheTranscript(result.job_id, result.transcript, {
+          title: result.video_title,
+          url: result.video_url,
+          batchId: batchId
+        });
+      }
+    }
+    
+    return results;
+  } catch (error) {
+    console.error('API Error:', error);
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to get batch results');
+  }
+}
+
+// Cache management functions
+export async function getCacheStats() {
+  return await cache.getCacheStats();
+}
+
+export function clearCache() {
+  cache.clearAll();
+}
+
+export async function clearExpiredCache() {
+  await cache.clearExpiredCache();
 }

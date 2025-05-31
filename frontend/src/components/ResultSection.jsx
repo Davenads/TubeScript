@@ -3,6 +3,7 @@ import { renameSpeakers, exportTranscript, fetchTranscript, mergeSpeakers } from
 import TranscriptSegment from './TranscriptSegment';
 import SpeakerLabel from './SpeakerLabel';
 import YouTubeEnhancedExport from './YouTubeEnhancedExport';
+import CacheIndicator from './CacheIndicator';
 
 const ResultSection = ({ transcript, jobId, onTranscriptUpdate }) => {
   const [success, setSuccess] = useState('');
@@ -187,7 +188,13 @@ const ResultSection = ({ transcript, jobId, onTranscriptUpdate }) => {
   
   return (
     <section>
-      <h2 className="text-2xl mb-4 text-emerald-400">Transcript</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl text-emerald-400">Transcript</h2>
+        <CacheIndicator 
+          isCached={transcript.cached} 
+          timestamp={transcript.cachedAt}
+        />
+      </div>
       <div className="card">
         <div className="metadata">
           <div>Title: {transcript.metadata.title}</div>

@@ -10,11 +10,12 @@ from typing import Optional
 load_dotenv()
 
 # Import modules
-from modules.youtube import download_youtube_audio
+from modules.youtube import download_youtube_audio, extract_batch_info, get_video_list_preview
 from modules.diarization import perform_diarization
 from modules.transcription import transcribe_segments
 from modules.assembler import assemble_transcript
 from modules.enhanced_export import EnhancedExport
+from utils.validators import is_valid_youtube_url, get_youtube_url_type
 
 # Create app instance
 app = FastAPI(title="TubeScript API", description="YouTube Audio Diarization and Transcription API")
@@ -30,10 +31,23 @@ app.add_middleware(
 
 # Job storage (in-memory for demonstration, use database in production)
 job_store = {}
+batch_store = {}
 
 # Request models
 class YouTubeRequest(BaseModel):
     url: HttpUrl
+    diarization_enabled: bool = True
+    diarization_sensitivity: float = 0.5
+
+class BatchPreviewRequest(BaseModel):
+    url: HttpUrl
+    limit: int = 10
+
+class BatchProcessRequest(BaseModel):
+    url: HttpUrl
+    limit: Optional[int] = None
+    diarization_enabled: bool = True
+    diarization_sensitivity: float = 0.5
 
 class RenameRequest(BaseModel):
     speaker_mapping: dict[str, str]
@@ -55,6 +69,15 @@ async def read_root():
 
 @app.post("/api/process", response_model=JobStatus)
 async def process_youtube(request: YouTubeRequest, background_tasks: BackgroundTasks):
+    # Validate URL
+    if not is_valid_youtube_url(str(request.url)):
+        raise HTTPException(status_code=400, detail="Invalid YouTube URL")
+    
+    # Check if it's a single video
+    url_type = get_youtube_url_type(str(request.url))
+    if url_type != 'video':
+        raise HTTPException(status_code=400, detail="Use batch processing endpoint for playlists and channels")
+    
     # Generate a unique job ID
     job_id = str(uuid.uuid4())
     
@@ -64,14 +87,18 @@ async def process_youtube(request: YouTubeRequest, background_tasks: BackgroundT
         "progress": 0.0,
         "message": "Job queued for processing",
         "result": None,
-        "original_speakers": {}
+        "original_speakers": {},
+        "diarization_enabled": request.diarization_enabled,
+        "diarization_sensitivity": request.diarization_sensitivity
     }
     
     # Add task to background queue
     background_tasks.add_task(
         process_video, 
         job_id=job_id, 
-        youtube_url=str(request.url)
+        youtube_url=str(request.url),
+        diarization_enabled=request.diarization_enabled,
+        diarization_sensitivity=request.diarization_sensitivity
     )
     
     return JobStatus(
@@ -80,6 +107,123 @@ async def process_youtube(request: YouTubeRequest, background_tasks: BackgroundT
         progress=0.0,
         message="Job queued for processing"
     )
+
+@app.post("/api/batch-preview")
+async def get_batch_preview(request: BatchPreviewRequest):
+    """Get preview of videos in a playlist or channel"""
+    # Validate URL
+    if not is_valid_youtube_url(str(request.url)):
+        raise HTTPException(status_code=400, detail="Invalid YouTube URL")
+    
+    # Check if it's a playlist or channel
+    url_type = get_youtube_url_type(str(request.url))
+    if url_type not in ['playlist', 'channel']:
+        raise HTTPException(status_code=400, detail="URL must be a playlist or channel")
+    
+    try:
+        preview = await get_video_list_preview(str(request.url), request.limit)
+        return preview
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to extract preview: {str(e)}")
+
+@app.post("/api/batch-process")
+async def process_batch(request: BatchProcessRequest, background_tasks: BackgroundTasks):
+    """Start batch processing of playlist or channel"""
+    # Validate URL
+    if not is_valid_youtube_url(str(request.url)):
+        raise HTTPException(status_code=400, detail="Invalid YouTube URL")
+    
+    # Check if it's a playlist or channel
+    url_type = get_youtube_url_type(str(request.url))
+    if url_type not in ['playlist', 'channel']:
+        raise HTTPException(status_code=400, detail="URL must be a playlist or channel")
+    
+    # Generate a unique batch ID
+    batch_id = str(uuid.uuid4())
+    
+    # Create batch entry
+    batch_store[batch_id] = {
+        "status": "queued",
+        "progress": 0.0,
+        "message": "Batch job queued for processing",
+        "url": str(request.url),
+        "url_type": url_type,
+        "limit": request.limit,
+        "diarization_enabled": request.diarization_enabled,
+        "diarization_sensitivity": request.diarization_sensitivity,
+        "videos": [],
+        "completed_jobs": [],
+        "failed_jobs": [],
+        "total_videos": 0
+    }
+    
+    # Add batch task to background queue
+    background_tasks.add_task(
+        process_batch_videos,
+        batch_id=batch_id,
+        url=str(request.url),
+        limit=request.limit,
+        diarization_enabled=request.diarization_enabled,
+        diarization_sensitivity=request.diarization_sensitivity
+    )
+    
+    return {
+        "batch_id": batch_id,
+        "status": "queued",
+        "progress": 0.0,
+        "message": "Batch job queued for processing"
+    }
+
+@app.get("/api/batch-status/{batch_id}")
+async def get_batch_status(batch_id: str):
+    """Get status of batch processing job"""
+    if batch_id not in batch_store:
+        raise HTTPException(status_code=404, detail="Batch job not found")
+    
+    batch = batch_store[batch_id]
+    
+    return {
+        "batch_id": batch_id,
+        "status": batch["status"],
+        "progress": batch["progress"],
+        "message": batch["message"],
+        "total_videos": batch["total_videos"],
+        "completed": len(batch["completed_jobs"]),
+        "failed": len(batch["failed_jobs"]),
+        "videos": batch["videos"]
+    }
+
+@app.get("/api/batch-results/{batch_id}")
+async def get_batch_results(batch_id: str):
+    """Get completed results from batch processing"""
+    if batch_id not in batch_store:
+        raise HTTPException(status_code=404, detail="Batch job not found")
+    
+    batch = batch_store[batch_id]
+    
+    if batch["status"] not in ["completed", "partial"]:
+        raise HTTPException(status_code=400, detail="Batch processing not complete")
+    
+    # Return completed job results
+    results = []
+    for job_id in batch["completed_jobs"]:
+        if job_id in job_store:
+            job = job_store[job_id]
+            results.append({
+                "job_id": job_id,
+                "video_title": job["result"]["metadata"]["title"],
+                "video_url": job["result"]["metadata"]["url"],
+                "transcript": job["result"]
+            })
+    
+    return {
+        "batch_id": batch_id,
+        "status": batch["status"],
+        "total_videos": batch["total_videos"],
+        "completed": len(results),
+        "failed": len(batch["failed_jobs"]),
+        "results": results
+    }
 
 @app.get("/api/status/{job_id}", response_model=JobStatus)
 async def get_job_status(job_id: str):
@@ -350,7 +494,98 @@ async def export_transcript(job_id: str, format: str = "txt", options: Optional[
     else:
         return {"message": f"Export in {format} format not implemented yet"}
 
-async def process_video(job_id: str, youtube_url: str):
+async def process_batch_videos(batch_id: str, url: str, limit: Optional[int], diarization_enabled: bool, diarization_sensitivity: float):
+    """Background task to process multiple videos from playlist/channel"""
+    batch = batch_store[batch_id]
+    
+    try:
+        print(f"\n[BATCH {batch_id}] Starting batch processing of URL: {url}")
+        
+        # Step 1: Extract video list
+        batch["status"] = "extracting"
+        batch["message"] = "Extracting video list..."
+        batch["progress"] = 0.1
+        
+        batch_info = await extract_batch_info(url, limit)
+        videos = batch_info["videos"]
+        
+        batch["videos"] = videos
+        batch["total_videos"] = len(videos)
+        
+        if len(videos) == 0:
+            batch["status"] = "completed"
+            batch["message"] = "No videos found"
+            return
+        
+        print(f"[BATCH {batch_id}] Found {len(videos)} videos to process")
+        
+        # Step 2: Process each video
+        batch["status"] = "processing"
+        batch["message"] = f"Processing videos (0/{len(videos)})"
+        
+        for i, video in enumerate(videos):
+            try:
+                print(f"[BATCH {batch_id}] Processing video {i+1}/{len(videos)}: {video['title']}")
+                
+                # Create individual job for this video
+                job_id = str(uuid.uuid4())
+                job_store[job_id] = {
+                    "status": "queued",
+                    "progress": 0.0,
+                    "message": "Job queued for processing",
+                    "result": None,
+                    "original_speakers": {},
+                    "diarization_enabled": diarization_enabled,
+                    "diarization_sensitivity": diarization_sensitivity,
+                    "batch_id": batch_id,
+                    "video_info": video
+                }
+                
+                # Process this video
+                await process_video(job_id, video["url"], diarization_enabled, diarization_sensitivity)
+                
+                # Check if processing succeeded
+                if job_store[job_id]["status"] == "completed":
+                    batch["completed_jobs"].append(job_id)
+                    print(f"[BATCH {batch_id}] Video {i+1}/{len(videos)} completed successfully")
+                else:
+                    batch["failed_jobs"].append(job_id)
+                    print(f"[BATCH {batch_id}] Video {i+1}/{len(videos)} failed: {job_store[job_id]['message']}")
+                
+            except Exception as e:
+                print(f"[BATCH {batch_id}] Error processing video {i+1}: {str(e)}")
+                batch["failed_jobs"].append(f"video_{i+1}")
+            
+            # Update batch progress
+            progress = 0.1 + (0.9 * (i + 1) / len(videos))
+            batch["progress"] = progress
+            batch["message"] = f"Processing videos ({i+1}/{len(videos)})"
+        
+        # Update final status
+        completed_count = len(batch["completed_jobs"])
+        failed_count = len(batch["failed_jobs"])
+        
+        if completed_count == len(videos):
+            batch["status"] = "completed"
+            batch["message"] = f"All {completed_count} videos processed successfully"
+        elif completed_count > 0:
+            batch["status"] = "partial"
+            batch["message"] = f"{completed_count} videos completed, {failed_count} failed"
+        else:
+            batch["status"] = "failed"
+            batch["message"] = f"All {failed_count} videos failed to process"
+        
+        batch["progress"] = 1.0
+        
+        print(f"[BATCH {batch_id}] Batch processing completed: {completed_count} successful, {failed_count} failed")
+        
+    except Exception as e:
+        batch["status"] = "failed"
+        batch["message"] = f"Batch processing error: {str(e)}"
+        batch["progress"] = 0.0
+        print(f"[BATCH {batch_id}] Fatal error: {str(e)}")
+
+async def process_video(job_id: str, youtube_url: str, diarization_enabled: bool = True, diarization_sensitivity: float = 0.5):
     """Background task to process a YouTube video"""
     job = job_store[job_id]
     
@@ -366,12 +601,23 @@ async def process_video(job_id: str, youtube_url: str):
         audio_path, video_info = await download_youtube_audio(youtube_url)
         print(f"[JOB {job_id}] YouTube audio downloaded to {audio_path}")
         job["progress"] = 0.3
-        job["message"] = "Performing speaker diarization"
         
-        # Step 2: Perform speaker diarization
-        print(f"[JOB {job_id}] Starting speaker diarization...")
-        diarization_result = await perform_diarization(audio_path)
-        print(f"[JOB {job_id}] Speaker diarization completed. Found {len(diarization_result)} segments")
+        # Step 2: Perform speaker diarization (if enabled)
+        if diarization_enabled:
+            job["message"] = "Performing speaker diarization"
+            print(f"[JOB {job_id}] Starting speaker diarization with sensitivity {diarization_sensitivity}...")
+            diarization_result = await perform_diarization(audio_path, sensitivity=diarization_sensitivity)
+            print(f"[JOB {job_id}] Speaker diarization completed. Found {len(diarization_result)} segments")
+        else:
+            job["message"] = "Skipping speaker diarization"
+            print(f"[JOB {job_id}] Skipping speaker diarization (disabled)")
+            # Create a single segment for the entire audio
+            diarization_result = [{
+                "start": 0.0,
+                "end": video_info.get("duration", 3600),  # Default to 1 hour if duration unknown
+                "speaker": "Speaker 1"
+            }]
+        
         job["progress"] = 0.6
         job["message"] = "Transcribing audio segments"
         
@@ -411,6 +657,7 @@ async def process_video(job_id: str, youtube_url: str):
         job["status"] = "failed"
         job["message"] = f"Error: {str(e)}"
         job["progress"] = 0.0
+        print(f"[JOB {job_id}] Processing failed: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
