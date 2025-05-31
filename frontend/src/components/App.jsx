@@ -48,7 +48,7 @@ const App = () => {
       <main>
         {/* Tab Navigation */}
         <div className="mb-6">
-          <div className="flex border-b border-gray-700">
+          <div className="flex border-b border-slate-400 dark:border-gray-700">
             <button
               onClick={() => {
                 setActiveTab('single');
@@ -57,7 +57,7 @@ const App = () => {
               className={`px-6 py-3 font-medium transition-colors ${
                 activeTab === 'single'
                   ? 'text-emerald-400 border-b-2 border-emerald-400'
-                  : 'text-gray-400 hover:text-gray-300'
+                  : 'text-gray-200 hover:text-gray-100 dark:text-gray-400 dark:hover:text-gray-300'
               }`}
             >
               Single Video
@@ -70,7 +70,7 @@ const App = () => {
               className={`px-6 py-3 font-medium transition-colors ${
                 activeTab === 'batch'
                   ? 'text-emerald-400 border-b-2 border-emerald-400'
-                  : 'text-gray-400 hover:text-gray-300'
+                  : 'text-gray-200 hover:text-gray-100 dark:text-gray-400 dark:hover:text-gray-300'
               }`}
             >
               Batch Processing
