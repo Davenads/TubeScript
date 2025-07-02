@@ -10,7 +10,7 @@ from typing import Optional
 load_dotenv()
 
 # Import modules
-from modules.youtube import download_youtube_audio, extract_batch_info, get_video_list_preview
+from modules.youtube import download_youtube_audio, extract_batch_info, get_video_list_preview, get_all_videos_from_source
 from modules.diarization import perform_diarization
 from modules.transcription import transcribe_segments
 from modules.assembler import assemble_transcript
@@ -46,8 +46,14 @@ class BatchPreviewRequest(BaseModel):
 class BatchProcessRequest(BaseModel):
     url: HttpUrl
     limit: Optional[int] = None
+    selected_videos: Optional[list[str]] = None  # List of video IDs to process
     diarization_enabled: bool = True
     diarization_sensitivity: float = 0.5
+
+class VideoListRequest(BaseModel):
+    url: HttpUrl
+    offset: int = 0
+    limit: int = 50
 
 class RenameRequest(BaseModel):
     speaker_mapping: dict[str, str]
@@ -126,6 +132,29 @@ async def get_batch_preview(request: BatchPreviewRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to extract preview: {str(e)}")
 
+@app.post("/api/video-list")
+async def get_video_list(request: VideoListRequest):
+    """Get paginated list of all videos from playlist or channel for interactive selection"""
+    # Validate URL
+    if not is_valid_youtube_url(str(request.url)):
+        raise HTTPException(status_code=400, detail="Invalid YouTube URL")
+    
+    # Check if it's a playlist or channel
+    url_type = get_youtube_url_type(str(request.url))
+    if url_type not in ['playlist', 'channel']:
+        raise HTTPException(status_code=400, detail="URL must be a playlist or channel")
+    
+    try:
+        print(f"Getting video list for URL: {request.url}, offset: {request.offset}, limit: {request.limit}")
+        video_list = await get_all_videos_from_source(str(request.url), request.offset, request.limit)
+        print(f"Video list extraction successful: {len(video_list.get('videos', []))} videos")
+        return video_list
+    except Exception as e:
+        print(f"Error in get_video_list: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to extract video list: {str(e)}")
+
 @app.post("/api/batch-process")
 async def process_batch(request: BatchProcessRequest, background_tasks: BackgroundTasks):
     """Start batch processing of playlist or channel"""
@@ -163,6 +192,7 @@ async def process_batch(request: BatchProcessRequest, background_tasks: Backgrou
         batch_id=batch_id,
         url=str(request.url),
         limit=request.limit,
+        selected_videos=request.selected_videos,
         diarization_enabled=request.diarization_enabled,
         diarization_sensitivity=request.diarization_sensitivity
     )
@@ -494,7 +524,7 @@ async def export_transcript(job_id: str, format: str = "txt", options: Optional[
     else:
         return {"message": f"Export in {format} format not implemented yet"}
 
-async def process_batch_videos(batch_id: str, url: str, limit: Optional[int], diarization_enabled: bool, diarization_sensitivity: float):
+async def process_batch_videos(batch_id: str, url: str, limit: Optional[int], selected_videos: Optional[list[str]], diarization_enabled: bool, diarization_sensitivity: float):
     """Background task to process multiple videos from playlist/channel"""
     batch = batch_store[batch_id]
     
@@ -507,17 +537,25 @@ async def process_batch_videos(batch_id: str, url: str, limit: Optional[int], di
         batch["progress"] = 0.1
         
         batch_info = await extract_batch_info(url, limit)
-        videos = batch_info["videos"]
+        all_videos = batch_info["videos"]
+        
+        # Filter videos if specific videos are selected
+        if selected_videos:
+            videos = [video for video in all_videos if video["id"] in selected_videos]
+            print(f"[BATCH {batch_id}] Filtered to {len(videos)} selected videos out of {len(all_videos)} total")
+        else:
+            videos = all_videos
+            print(f"[BATCH {batch_id}] Processing all {len(videos)} videos")
         
         batch["videos"] = videos
         batch["total_videos"] = len(videos)
         
         if len(videos) == 0:
             batch["status"] = "completed"
-            batch["message"] = "No videos found"
+            batch["message"] = "No videos found to process"
             return
         
-        print(f"[BATCH {batch_id}] Found {len(videos)} videos to process")
+        print(f"[BATCH {batch_id}] Starting processing of {len(videos)} videos")
         
         # Step 2: Process each video
         batch["status"] = "processing"

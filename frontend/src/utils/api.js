@@ -201,6 +201,17 @@ export async function getBatchPreview(url, limit = 10) {
   }
 }
 
+// Get full video list with pagination for interactive selection
+export async function getVideoList(url, offset = 0, limit = 50) {
+  try {
+    const response = await api.post('/api/video-list', { url, offset, limit });
+    return response.data;
+  } catch (error) {
+    console.error('API Error:', error);
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to get video list');
+  }
+}
+
 // Start batch processing
 export async function processBatch(url, options = {}) {
   try {

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { getBatchPreview, processBatch } from '../utils/api';
+import VideoSelector from './VideoSelector';
 
 const BatchProcessingSection = ({ onBatchStart }) => {
   const [batchUrl, setBatchUrl] = useState('');
@@ -8,6 +9,8 @@ const BatchProcessingSection = ({ onBatchStart }) => {
   const [videoLimit, setVideoLimit] = useState(10);
   const [preview, setPreview] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [showVideoSelector, setShowVideoSelector] = useState(false);
+  const [selectedVideos, setSelectedVideos] = useState([]);
   const [diarizationEnabled, setDiarizationEnabled] = useState(true);
   const [diarizationSensitivity, setDiarizationSensitivity] = useState(0.5);
   const [showDiarizationInfo, setShowDiarizationInfo] = useState(false);
@@ -33,22 +36,32 @@ const BatchProcessingSection = ({ onBatchStart }) => {
     }
   };
 
-  const handleStartBatch = async () => {
-    if (!preview) {
-      setError('Please preview the batch first');
-      return;
-    }
+  const handleSelectVideos = () => {
+    setShowVideoSelector(true);
+    setShowPreview(false);
+  };
 
+  const handleStartBatch = async () => {
     try {
       setError('');
       setIsProcessing(true);
       
-      const batchData = await processBatch(batchUrl, {
-        limit: videoLimit,
+      // Use selected videos if available, otherwise use limit for all videos
+      const batchOptions = {
         diarization_enabled: diarizationEnabled,
         diarization_sensitivity: diarizationSensitivity
-      });
+      };
       
+      if (selectedVideos.length > 0) {
+        batchOptions.selected_videos = selectedVideos;
+      } else if (preview) {
+        batchOptions.limit = videoLimit;
+      } else {
+        setError('Please preview videos or select specific videos first');
+        return;
+      }
+      
+      const batchData = await processBatch(batchUrl, batchOptions);
       onBatchStart(batchData.batch_id);
     } catch (error) {
       console.error('Error starting batch:', error);
@@ -56,6 +69,10 @@ const BatchProcessingSection = ({ onBatchStart }) => {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleVideoSelectionChange = (videos) => {
+    setSelectedVideos(videos);
   };
 
   return (
@@ -168,10 +185,19 @@ const BatchProcessingSection = ({ onBatchStart }) => {
             onClick={handlePreviewBatch}
             disabled={isProcessing || !batchUrl.trim()}
           >
-            {isProcessing ? 'Loading...' : 'Preview Videos'}
+            {isProcessing ? 'Loading...' : 'Quick Preview'}
           </button>
           
-          {preview && (
+          <button 
+            type="button" 
+            className="btn-secondary"
+            onClick={handleSelectVideos}
+            disabled={isProcessing || !batchUrl.trim()}
+          >
+            Select Videos
+          </button>
+          
+          {(preview || selectedVideos.length > 0) && (
             <button 
               type="button" 
               className="btn-primary"
@@ -179,6 +205,7 @@ const BatchProcessingSection = ({ onBatchStart }) => {
               disabled={isProcessing}
             >
               Start Batch Processing
+              {selectedVideos.length > 0 && ` (${selectedVideos.length} videos)`}
             </button>
           )}
         </div>
@@ -213,6 +240,28 @@ const BatchProcessingSection = ({ onBatchStart }) => {
                 Will process {Math.min(videoLimit, preview.total_videos)} of {preview.total_videos} videos
               </div>
             )}
+          </div>
+        )}
+
+        {showVideoSelector && (
+          <div className="mt-6 p-4 bg-gray-700/30 rounded-lg border border-gray-600">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-emerald-400">
+                Select Videos to Process
+              </h3>
+              <button
+                onClick={() => setShowVideoSelector(false)}
+                className="text-gray-400 hover:text-gray-200"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <VideoSelector
+              url={batchUrl}
+              onSelectionChange={handleVideoSelectionChange}
+              initialSelected={selectedVideos}
+            />
           </div>
         )}
       </div>
