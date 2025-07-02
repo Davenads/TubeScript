@@ -221,7 +221,10 @@ const VideoSelector = ({ url, onSelectionChange, initialSelected = [] }) => {
             <input
               type="checkbox"
               checked={selectedVideos.has(video.id)}
-              onChange={() => handleVideoToggle(video.id)}
+              onChange={(e) => {
+                e.stopPropagation();
+                handleVideoToggle(video.id);
+              }}
               className="form-checkbox"
             />
             
