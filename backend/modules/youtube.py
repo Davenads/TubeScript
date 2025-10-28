@@ -23,12 +23,13 @@ async def download_youtube_audio(youtube_url: str):
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': os.path.join(temp_dir, 'audio'),
-        'postprocessors': [{  
+        'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'wav',
         }],
         'quiet': True,
-        'no_warnings': True
+        'no_warnings': True,
+        'noprogress': True  # Suppress download progress output
     }
     
     # Run the download process in a thread pool
@@ -78,6 +79,7 @@ async def extract_batch_info(url: str, limit: Optional[int] = None) -> Dict:
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
+        'noprogress': True,  # Suppress progress output
         'extract_flat': True,  # Don't download, just get metadata
         'socket_timeout': 30,  # 30 second timeout
         'retries': 2,

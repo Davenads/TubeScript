@@ -20,10 +20,9 @@ async def perform_diarization(audio_path: str, sensitivity: float = 0.5):
     # Run diarization in a thread pool to avoid blocking
     loop = asyncio.get_event_loop()
     
-    # Start GPU monitoring if CUDA is available
+    # Start GPU monitoring if CUDA is available (but less frequently to reduce noise)
     if torch.cuda.is_available():
-        print("\nStarting GPU monitoring during diarization...")
-        stop_monitoring = start_gpu_monitoring(interval=5.0)
+        stop_monitoring = start_gpu_monitoring(interval=30.0)  # Check every 30 seconds instead of 5
     else:
         stop_monitoring = lambda: None
     
@@ -36,15 +35,15 @@ async def perform_diarization(audio_path: str, sensitivity: float = 0.5):
         if torch.cuda.is_available():
             cuda_device = torch.cuda.current_device()
             device = f"cuda:{cuda_device}"
-            print(f"CUDA available for diarization: Using {torch.cuda.get_device_name(cuda_device)}")
-            print(f"CUDA memory before loading diarization model: {torch.cuda.memory_allocated(cuda_device) / 1024**2:.2f} MB")
+            print(f"🚀 Using GPU: {torch.cuda.get_device_name(cuda_device)}")
         else:
-            print("WARNING: CUDA not available for diarization, using CPU (will be much slower)")
+            print("⚠️  CUDA not available for diarization, using CPU (will be much slower)")
         
         # Filter common PyTorch warnings that don't affect functionality
         import warnings
         warnings.filterwarnings("ignore", message="std\\(\\): degrees of freedom")
         warnings.filterwarnings("ignore", message="Reduction of non-zero size tensor to zero size")
+        warnings.filterwarnings("ignore", category=UserWarning, module="pyannote.audio.utils.reproducibility")
             
         pipeline = Pipeline.from_pretrained(
             "pyannote/speaker-diarization-3.1",
@@ -58,20 +57,22 @@ async def perform_diarization(audio_path: str, sensitivity: float = 0.5):
         
         # Move model to specified device
         pipeline = pipeline.to(torch.device(device))
-        print(f"Speaker diarization model loaded successfully on {device}")
-        
-        if torch.cuda.is_available():
-            print(f"CUDA memory after loading diarization model: {torch.cuda.memory_allocated() / 1024**2:.2f} MB")
+        print(f"✓ Diarization model loaded on {device}")
             
         # Apply the pipeline to the audio file
         print(f"Starting diarization of {audio_path}...")
+        print("⏳ This may take several minutes depending on audio length...")
+        print("   (pyannote.audio doesn't provide progress updates during processing)")
+
         start_time = torch.cuda.Event(enable_timing=True) if torch.cuda.is_available() else None
         end_time = torch.cuda.Event(enable_timing=True) if torch.cuda.is_available() else None
-        
+
         if start_time:
             start_time.record()
-            
+
         diarization = pipeline(audio_path)
+
+        print("✓ Diarization processing completed!")
         
         if end_time:
             end_time.record()
@@ -101,12 +102,6 @@ async def perform_diarization(audio_path: str, sensitivity: float = 0.5):
     # Stop GPU monitoring
     if torch.cuda.is_available():
         stop_monitoring()
-        
-        # Report GPU memory stats after diarization
-        print("\n===== DIARIZATION COMPLETED =====")
-        print(f"Final CUDA memory allocated: {torch.cuda.memory_allocated() / 1024**2:.2f} MB")
-        print(f"Final CUDA memory reserved: {torch.cuda.memory_reserved() / 1024**2:.2f} MB")
-        print(f"Peak CUDA memory allocated: {torch.cuda.max_memory_allocated() / 1024**2:.2f} MB")
-        print("==================================\n")
+        print(f"Peak GPU Memory: {torch.cuda.max_memory_allocated() / 1024**2:.0f} MB\n")
     
     return diarization_result

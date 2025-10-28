@@ -699,4 +699,9 @@ async def process_video(job_id: str, youtube_url: str, diarization_enabled: bool
 
 if __name__ == "__main__":
     import uvicorn
+    from logging_config import setup_logging
+
+    # Setup logging filters
+    setup_logging()
+
     uvicorn.run("app:app", host="0.0.0.0", port=8001, reload=True)

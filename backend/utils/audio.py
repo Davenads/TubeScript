@@ -82,16 +82,19 @@ def start_gpu_monitoring(interval=5.0):
     
     def monitor_thread():
         gpu_id = torch.cuda.current_device()
-        iteration = 0
-        
-        print("\n===== Starting GPU Monitoring =====")
-        print(f"GPU: {torch.cuda.get_device_name(gpu_id)}")
-        
+        start_time = time.time()
+
+        print(f"\n🖥️  GPU: {torch.cuda.get_device_name(gpu_id)}")
+
         while not stop_event.is_set():
             # Get memory statistics
             allocated = torch.cuda.memory_allocated(gpu_id) / 1024**2
             reserved = torch.cuda.memory_reserved(gpu_id) / 1024**2
-            
+
+            # Calculate elapsed time
+            elapsed = int(time.time() - start_time)
+            mins, secs = divmod(elapsed, 60)
+
             # Get GPU utilization if nvml is available
             gpu_util = "N/A"
             try:
@@ -103,11 +106,9 @@ def start_gpu_monitoring(interval=5.0):
                 pynvml.nvmlShutdown()
             except:
                 pass
-                
-            print(f"[GPU Monitor] Iteration {iteration}: Allocated: {allocated:.1f} MB, "
-                  f"Reserved: {reserved:.1f} MB, Utilization: {gpu_util}")
-                  
-            iteration += 1
+
+            print(f"[{mins:02d}:{secs:02d}] GPU Memory: {allocated:.0f}/{reserved:.0f} MB | Utilization: {gpu_util}")
+
             time.sleep(interval)
     
     # Start monitoring thread
