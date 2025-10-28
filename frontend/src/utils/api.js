@@ -2,7 +2,7 @@ import axios from 'axios';
 import cache from './cache.js';
 
 // API endpoint configuration
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = 'http://localhost:8001';
 
 // Create axios instance
 const api = axios.create({

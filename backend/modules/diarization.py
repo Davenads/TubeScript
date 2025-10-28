@@ -53,10 +53,8 @@ async def perform_diarization(audio_path: str, sensitivity: float = 0.5):
         
         # Configure clustering parameters based on sensitivity
         # Higher sensitivity = more speakers detected
-        if hasattr(pipeline, '_segmentation'):
-            pipeline._segmentation.clustering.min_cluster_size = max(0.1, 1.0 - sensitivity)
-        if hasattr(pipeline, '_clustering'):
-            pipeline._clustering.min_cluster_size = max(0.1, 1.0 - sensitivity)
+        # Note: Direct clustering configuration is deprecated in newer versions
+        # Sensitivity parameter will be handled through pipeline instantiation parameters
         
         # Move model to specified device
         pipeline = pipeline.to(torch.device(device))
